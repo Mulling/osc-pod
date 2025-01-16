@@ -1,4 +1,5 @@
 import os
+import platform
 from osc import cmdln
 from osc import core
 from osc import oscerr
@@ -9,11 +10,18 @@ repo2image = {
     'openSUSE_Tumbleweed': 'opensuse/tumbleweed',
 }
 
-@cmdln.option('-w', '--workdir', help='working directory', action='store_true')
+arch2arch = {
+    'x86_64': 'amd64'
+}
+
+@cmdln.option('-w', '--workdir', action='store_true',
+              help='use volume as the work dir')
 @cmdln.option('-r', '--runner', default='podman',
               help='use the specified runner')
 @cmdln.option('-v', '--volume', default='/root/rpms',
               help='overwride rpms mount point')
+@cmdln.option('-p', '--platform', default='',
+              help='use the specified platformstring, i.e., linux/amd64')
 def do_pod(self, subcmd, opts, *args):
     """${cmd_name}: Run a container with the build rpms
 
@@ -23,15 +31,19 @@ def do_pod(self, subcmd, opts, *args):
                            the image based on the repo)
 
     """
+    verbose = opts.verbose
+    debug = opts.debug
+
     # TODO: Check if build_root is in the config and act accordingly
     # config_parse = core.conf.get_configParser(opts.conffile)
     # TODO: check for --vm-type=kvm|qemu
     # TODO: check if arch matches for the cases above
 
-    repo: str = ""
-    arch: str = ""
-    image: str = ""
-    entrypoint: str = ""
+    repo: str = ''
+    arch: str = ''
+    image: str = ''
+    target: str = ''
+    entrypoint: str = ''
 
     pkg = core.store_read_package('.')
 
@@ -57,10 +69,22 @@ def do_pod(self, subcmd, opts, *args):
     runner = opts.runner
     volume = opts.volume
 
+    # Skip pasing `--platform` if the last build was the same target as us,
+    # this makes podman start faster
+    if platform.processor() != arch:
+        target = f"--platform linux/{arch2arch[arch]}"
+    elif opts.platform:
+        target = f"--platform {opts.platform}"
+
     if opts.workdir:
         entrypoint = f'-w {volume}'
 
-    if opts.verbose:
+    if verbose:
         print(f'Running {runner} image {image} with {pkg} rpms in {volume}')
 
-    os.system(f'{runner} run --rm -it -v={rpms}:{volume} {entrypoint} {image}')
+    cmd = (f'{runner} run --rm -it -v={rpms}:{volume} {target} {entrypoint} {image}')
+
+    if debug:
+        print(cmd)
+
+    os.system(cmd)
