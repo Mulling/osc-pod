@@ -102,14 +102,11 @@ def do_pod(self, subcmd, opts, *args):
     verbose = opts.verbose
     debug = opts.debug
 
-    # TODO: Check if build_root is in the config and act accordingly
-    # config_parse = core.conf.get_configParser(opts.conffile)
-    # TODO: check for --vm-type=kvm|qemu
-    # TODO: check if arch matches for the cases above
-
     image: str = ''
     target: str = ''
     entrypoint: str = ''
+
+    native_arch = platform.processor()
 
     try:
         package = core.store_read_package('.')
@@ -120,7 +117,9 @@ def do_pod(self, subcmd, opts, *args):
     try:
         repo, arch, runner = store_read_last_buildroot()
     except oscerr.OscBaseError as e:
-        repo, arch, runner = 'openSUSE_Factory', 'x86_64', ''
+        # XXX: Maybe we should query osc for repos and prompt the user to
+        #      choose one. Also set get_binaries
+        repo, arch, runner = 'openSUSE_Factory', native_arch, ''
 
     if opts.repo:
         repo = opts.repo
