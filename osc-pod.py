@@ -1,6 +1,7 @@
 import os
 import platform
 import getpass
+import tempfile
 
 from osc import cmdln
 from osc import core
@@ -60,6 +61,8 @@ def store_read_last_buildroot() -> list[str]:
               help='overwride rpms mount point')
 @cmdln.option('-p', '--platform', default='',
               help='use the specified platformstring, i.e., linux/amd64')
+@cmdln.option('-b', '--get-binaries', action='store_true',
+              help='download binaries from obs')
 def do_pod(self, subcmd, opts, *args):
     """${cmd_name}: Run a container with the build rpms
 
@@ -95,10 +98,21 @@ def do_pod(self, subcmd, opts, *args):
         image = repo2image[repo]
 
     user = getpass.getuser() if runner in ['podman', 'kvm', 'qemu'] else None
-    buildroot = get_buildroot('', project, package,
-                              repo, arch, runner, user)
 
-    pacdir = get_pacdir(buildroot, arch)
+    if opts.get_binaries:
+        # Download packages from osc
+        apiurl = self.get_api_url()
+        binaries = core.get_binarylist(apiurl, project, repo, arch, package)
+
+        bindir = tempfile.TemporaryDirectory()
+        pacdir = bindir.name
+        for b in binaries:
+            core.get_binary_file(apiurl, project, repo, arch, b, package,
+                                 target_filename=f'{pacdir}/{b}')
+    else:
+        buildroot = get_buildroot('', project, package,
+                                  repo, arch, runner, user)
+        pacdir = get_pacdir(buildroot, arch)
 
     # Skip pasing `--platform` if the last build was the same target as us,
     # this makes podman start faster
