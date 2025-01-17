@@ -1,10 +1,36 @@
 import os
 import platform
 import getpass
+import tempfile
 
 from osc import cmdln
 from osc import core
 from osc import oscerr
+
+
+class SimpleProgress:
+    """
+    Class with the same API as tqdm to use when the module is not
+    installed
+    """
+    def __init__(self, iterable):
+        self._iterable = iterable
+        self._size = len(self._iterable)
+        self._index = 0
+
+    def __iter__(self):
+        return self._iterable.__iter__()
+
+    def set_description(self, desc):
+        self._index += 1
+        p = (self._index / self._size) * 100
+        print(f'\r{desc} {p:.2f}% {self._index}/{self._size}', end='')
+
+
+try:
+    from tqdm import tqdm
+except ModuleNotFoundError:
+    tqdm = SimpleProgress
 
 
 repo2image = {
@@ -60,6 +86,10 @@ def store_read_last_buildroot() -> list[str]:
               help='overwride rpms mount point')
 @cmdln.option('-p', '--platform', default='',
               help='use the specified platformstring, i.e., linux/amd64')
+@cmdln.option('-b', '--get-binaries', action='store_true',
+              help='download binaries from obs')
+@cmdln.option('--repo',
+              help='Use this repo to download binaries')
 def do_pod(self, subcmd, opts, *args):
     """${cmd_name}: Run a container with the build rpms
 
@@ -81,10 +111,19 @@ def do_pod(self, subcmd, opts, *args):
     target: str = ''
     entrypoint: str = ''
 
-    package = core.store_read_package('.')
+    try:
+        package = core.store_read_package('.')
+    except oscerr.NoWorkingCopy as e:
+        package = None
     project = core.store_read_project('.')
 
-    repo, arch, runner = store_read_last_buildroot()
+    try:
+        repo, arch, runner = store_read_last_buildroot()
+    except oscerr.OscBaseError as e:
+        repo, arch, runner = 'openSUSE_Factory', 'x86_64', ''
+
+    if opts.repo:
+        repo = opts.repo
 
     if args and len(args) > 1:
         raise oscerr.WrongArgs("Too many images!")
@@ -95,10 +134,24 @@ def do_pod(self, subcmd, opts, *args):
         image = repo2image[repo]
 
     user = getpass.getuser() if runner in ['podman', 'kvm', 'qemu'] else None
-    buildroot = get_buildroot('', project, package,
-                              repo, arch, runner, user)
 
-    pacdir = get_pacdir(buildroot, arch)
+    if opts.get_binaries:
+        # Download packages from osc
+        apiurl = self.get_api_url()
+        binaries = core.get_binarylist(apiurl, project, repo, arch, package)
+
+        bindir = tempfile.TemporaryDirectory()
+        pacdir = bindir.name
+        print(f'Downloading {len(binaries)} binaries from {project}/{package or ""} {arch}')
+        binaries = tqdm(binaries)
+        for b in binaries:
+            binaries.set_description(f'{b[:30]:<30}')
+            core.get_binary_file(apiurl, project, repo, arch, b, package,
+                                 target_filename=f'{pacdir}/{b}')
+    else:
+        buildroot = get_buildroot('', project, package,
+                                  repo, arch, runner, user)
+        pacdir = get_pacdir(buildroot, arch)
 
     # Skip pasing `--platform` if the last build was the same target as us,
     # this makes podman start faster
