@@ -84,10 +84,16 @@ def do_pod(self, subcmd, opts, *args):
     target: str = ''
     entrypoint: str = ''
 
-    package = core.store_read_package('.')
+    try:
+        package = core.store_read_package('.')
+    except oscerr.NoWorkingCopy as e:
+        package = None
     project = core.store_read_project('.')
 
-    repo, arch, runner = store_read_last_buildroot()
+    try:
+        repo, arch, runner = store_read_last_buildroot()
+    except oscerr.OscBaseError as e:
+        repo, arch, runner = 'openSUSE_Factory', 'x86_64', ''
 
     if args and len(args) > 1:
         raise oscerr.WrongArgs("Too many images!")
