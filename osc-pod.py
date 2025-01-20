@@ -169,7 +169,7 @@ def do_pod(self, subcmd, opts, *args):
     if verbose:
         print(f'Running {runner} image {image} with {project}/{package} rpms in {volume}')
 
-    cmd = (f'{runner} run --rm -it -v={pacdir}:{volume} {target} {entrypoint} {image}')
+    cmd = (f'{runner} run --rm -it -v={pacdir}:{volume}:z {target} {entrypoint} {image}')
 
     if debug:
         print(cmd)
