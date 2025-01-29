@@ -56,8 +56,9 @@ def get_buildroot(apihost, project, package, repo, arch, vm_type, user=None):
     }
 
     # Taken from osc/build.py
-    if vm_type != 'lxc' and vm_type != 'nspawn':
-        buildroot = os.path.join(buildroot, '.mount')
+    if (vm_type):
+        if vm_type != 'lxc' and vm_type != 'nspawn':
+            buildroot = os.path.join(buildroot, '.mount')
 
     return buildroot
 
