@@ -34,6 +34,7 @@ except ModuleNotFoundError:
 
 
 repo2image = {
+    'standard': 'opensuse/tumbleweed',
     'openSUSE_Factory': 'opensuse/tumbleweed',
     'openSUSE_Tumbleweed': 'opensuse/tumbleweed',
 }
@@ -62,13 +63,17 @@ def get_buildroot(apihost, project, package, repo, arch, vm_type, user=None):
 
     return buildroot
 
-def get_pacdir(buildroot:str, arch: str) -> str:
+def get_pacdir(buildroot:str, arch) -> str:
     pacdir = os.path.join(buildroot, '.build.packages')
     if os.path.islink(pacdir):
         pacdir = os.readlink(pacdir)
         pacdir = os.path.join(buildroot, pacdir)
 
-    return os.path.join(pacdir, 'RPMS', arch)
+    if arch:
+        return os.path.join(pacdir, 'RPMS', arch)
+    else:
+        return os.path.join(pacdir, 'RPMS')
+
 
 def store_read_last_buildroot() -> list[str]:
     last_broot = core.store_read_last_buildroot('.')
@@ -78,7 +83,8 @@ def store_read_last_buildroot() -> list[str]:
     else:
         raise oscerr.OscBaseError("Could not find package buildroot")
 
-
+@cmdln.option('-n', '--noarch', action='store_true',
+              help='mount all rpms')
 @cmdln.option('-w', '--workdir', action='store_true',
               help='use volume as the work dir')
 @cmdln.option('-r', '--runner', default='podman',
@@ -89,6 +95,8 @@ def store_read_last_buildroot() -> list[str]:
               help='use the specified platformstring, i.e., linux/amd64')
 @cmdln.option('-b', '--get-binaries', action='store_true',
               help='download binaries from obs')
+@cmdln.option('-p', '--pacdir', default='',
+              help='path to binaries')
 @cmdln.option('--repo',
               help='Use this repo to download binaries')
 def do_pod(self, subcmd, opts, *args):
@@ -148,10 +156,15 @@ def do_pod(self, subcmd, opts, *args):
             binaries.set_description(f'{b[:30]:<30}')
             core.get_binary_file(apiurl, project, repo, arch, b, package,
                                  target_filename=f'{pacdir}/{b}')
+    elif opts.pacdir:
+        pacdir = opts.pacdir
     else:
         buildroot = get_buildroot('', project, package,
                                   repo, arch, runner, user)
-        pacdir = get_pacdir(buildroot, arch)
+        if (opts.noarch):
+            pacdir = get_pacdir(buildroot, None)
+        else:
+            pacdir = get_pacdir(buildroot, arch)
 
     # Skip pasing `--platform` if the last build was the same target as us,
     # this makes podman start faster
